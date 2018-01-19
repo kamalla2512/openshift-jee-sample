@@ -1,0 +1,224 @@
+1 Master & 3 Nodes
+Master – 4 CPU, 16GB , 100HDD, & 30GB HDD (docker-storage)
+3 Nodes – 4 CPU, 16GB , 100HDD, & 30GB HDD (docker-storage)
+Resolve DNS Look up
+Add hostnames in /etc/hosts in all master & nodes
+ 
+Passwordless Authentication Setup
+ 
+Copy the .ssh/id_rsa.pub to all Master & Nodes under .ssh/authorized_keys
+ 
+ 
+ 
+Now login to your master first, it should go without password. 
+ 
+Do the same for all master & nodes, and login from Master, should go without password
+
+Disconnected Installation: Version 3.7
+I assume we already have RHN Server with all downloadable repositories and Openshift Enterprise container platform subscription activated. 
+RHN Server: http://rhn.virtusalabs.com 
+Create a repository in all Master & Nodes
+vi /etc/yum.repos.d/ose.repo
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+ 
+start with Installing Base Packages
+Docker Setup
+Install docker-1.12.6 version in all master & nodes
+ 
+Check the attached 30GB HDD
+ 
+Configure docker-storage-setup
+Add the below entries in /etc/sysconfig/docker-storage-setup
+DEVS=xvdb
+VG=docker-vg
+
+ 
+
+Then disable lvm cluster
+lvmconf --disable-cluster
+ 
+
+Run docker-storage-setup
+ 
+
+Check the docker-storage-volume
+ 
+
+Check the docker-storage configuration
+
+ 
+
+Start and enable Docker on all OpenShift nodes.
+$ systemctl enable docker && systemctl start docker
+
+ 
+
+
+
+Installation of Openshift Container platform
+
+yum -y install atomic-openshift-docker-excluder \
+atomic-openshift-excluder atomic-openshift-utils \
+bind-utils bridge-utils git \
+iptables-services net-tools wget 
+
+ 
+On the master and node1,node2 remove OpenShift exclusions from /etc/yum.conf.
+atomic-openshift-excluder unexclude
+ 
+Install the OpenShift Container Platform using tools provided in the atomic-openshift-utils package. Installation will take 20-45 minutes depending on system resources.
+ atomic-openshift-installer install
+ 
+ 
+ 
+ 
+ 
+
+To add nodes/additional masters  (added 1 master & 3 Nodes )
+ 
+Continue…
+ 
+Press enter to continue
+ 
+Leave blank to take its default master IP.
+Give your subdomain
+ 
+ 
+Press enter to continue
+ 
+ 
+If you feel, everything is correct then continue
+ 
+ 
+Installation started
+ 
+ 
+ 
+ 
+
+For 3.7
+	 
+
+When the installation completes, re-add exclusions to /etc/yum.conf.
+ 
+7.	Verify that all nodes and pods are in "Running"/"Ready" status.
+[root@master ~]# oc get pods
+ 
+ 
+Enable scheduling on master
+ 
+Verify that atomic-openshift-master and atomic-openshift-node are running on master server and that atomic-openshift-node is running on the node server.
+# systemctl status | grep openshift
+On Master:
+ 
+On Nodes
+ 
+If not already installed, install the httpd-tools package.
+yum -y install httpd-tools
+Create the credential file under /etc/origin/openshift-passwd
+touch /etc/origin/openshift-passwd
+Once the file is created, add a user with the name user1 and the password user1 using the htpasswd utility.
+# htpasswd -b /etc/origin/openshift-passwd user1 redhat
+Once the install completes, edit the master-config file to enable authentication using HTPasswd with credentials stored in /etc/origin/openshift-passwd. Save and close the file.
+On master node, under the oauthConfig section in file /etc/origin/master/master-config.yaml, replace the value kind: DenyAllPasswordIdentityProvider with kind: HTPasswdPasswordIdentityProvider, being mindful of indentation.
+oauthConfig:
+    name: deny_all
+    provider:
+      apiVersion: v1
+      kind: HTPasswdPasswordIdentityProvider 
+Being mindful of indentation, create a new file attribute either directly above OR directly below the previously edited kind attribute, pointing to /etc/origin/openshift-passwd, which is the file that will contain OpenShift authentication info.
+name: htpasswd_auth   
+ provider:
+      apiVersion: v1
+      file: /etc/origin/openshift-passwd
+      kind: HTPasswdPasswordIdentityProvider
+Assure that the cluster recognizes the new user. On the master node, restart the atomic-openshift-master service:
+# systemctl restart atomic-openshift-master
+ 
+Verify login either using the OC command-line client or by logging into the OpenShift web console as the newly-created user user1
+Open a web browser window and navigate to https://eu-ose.virtusalabs.com:8443. Since the master host uses a self-signed certificate, you will need to manually add an acception for your hostname in your browser settings. 
+Once the exception is added, you should be forwarded to the OpenShift Container Platform login page. Enter username user1 and password redhat.
+Once logged in, you should be presented with a "Welcome to OpenShift" greeting.
+ 
+
+ 
+Login to the master and create an admin user for external access through UI or CLI.
+oc login -u system:admin -n default
+ 
+Granth the cluster-admin role to user (admin)
+
+[root@master1 ~]# oadm policy add-cluster-role-to-user \
+cluster-admin admin
+ 
+
+ 
+GUI
+To access GUI simply point browser from laptop at the master on port 8443 (https://eu-ose.virtusalabs.com:8443).
+ 
+
+
+
+
+
+
+
+• Install or upgrade Cluster configuration using Ansible playbooks.
+
+ansible-playbook -i /root/.config/openshift/hosts /usr/share/ansible/openshift-ansible/playbooks/byo/openshift-cluster/config.yml
+ 
+
+Deploying ELK Stack in Openshift
+Add below lines into /root/.config/openshift/hosts
+openshift_hosted_logging_deploy=True
+openshift_master_logging_public_url=https://kibana.openshiftvirtusa.com
+ 
+ansible-playbook -i  /root/.config/openshift/hosts \
+/usr/share/ansible/openshift-ansible/playbooks/byo/openshift-cluster/openshift-logging.yml
+ 
+
+ 
+
+ 
+
+ 
+ 
+ 
+
+
+
+
+
+
+Install metrics
+Add the below in /root/.config/openshift/hosts
+openshift_hosted_metrics_deploy=True
+openshift_hosted_metrics_public_url= https://hawkular-metrics.virtusalabs.com/
+
+ 
+
+Run below command 
+
+ansible-playbook -i /root/.config/openshift/hosts /usr/share/ansible/openshift-ansible/playbooks/byo/openshift-cluster/openshift-metrics.yml    -e openshift_metrics_install_metrics=True    -e openshift_metrics_hawkular_hostname=hawkular-metrics.openshiftvirtusa.com
+
+ 
+
+ 
+ 
+
+ 
+ 
+
